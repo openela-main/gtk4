@@ -6,8 +6,8 @@
 %global pango_version 1.47.0
 %global cairo_version 1.14.0
 %global gdk_pixbuf_version 2.30.0
-%global wayland_protocols_version 1.21
-%global wayland_version 1.16.91
+%global wayland_protocols_version 1.31
+%global wayland_version 1.21.0
 %global epoxy_version 1.4
 
 %global bin_version 4.0.0
@@ -16,13 +16,13 @@
 %global __provides_exclude_from ^%{_libdir}/gtk-4.0
 
 Name:           gtk4
-Version:        4.4.1
+Version:        4.12.3
 Release:        2%{?dist}
 Summary:        GTK graphical user interface library
 
-License:        LGPLv2+
+License:        LGPL-2.0-or-later
 URL:            https://www.gtk.org
-Source0:        https://download.gnome.org/sources/gtk/4.4/gtk-%{version}.tar.xz
+Source0:        https://download.gnome.org/sources/gtk/4.12/gtk-%{version}.tar.xz
 
 BuildRequires:  cups-devel
 BuildRequires:  desktop-file-utils
@@ -61,6 +61,9 @@ BuildRequires:  pkgconfig(xinerama)
 BuildRequires:  pkgconfig(xkbcommon)
 BuildRequires:  pkgconfig(xrandr)
 BuildRequires:  pkgconfig(xrender)
+BuildRequires:  pkgconfig(libjpeg)
+BuildRequires:  pkgconfig(iso-codes)
+BuildRequires:  /usr/bin/rst2man
 BuildRequires:  /usr/bin/xsltproc
 
 # standard icons
@@ -87,7 +90,7 @@ Recommends: dconf%{?_isa}
 # Removed in F34
 Obsoletes: gtk4-devel-docs < 4.1.2
 
-Patch00001: 0001-gtkimcontextwayland-Set-a-higher-IO-extension-priori.patch
+Patch00001: preserve-old-glib-pango.diff
 
 %description
 GTK is a multi-platform toolkit for creating graphical user
@@ -134,7 +137,6 @@ export CFLAGS='-fno-strict-aliasing -DG_DISABLE_CAST_CHECKS -DG_DISABLE_ASSERT %
 %meson_install
 
 %find_lang gtk40
-%find_lang gtk40-properties
 
 %if !0%{?with_broadway}
 rm $RPM_BUILD_ROOT%{_mandir}/man1/gtk4-broadwayd.1*
@@ -171,7 +173,7 @@ desktop-file-validate %{buildroot}%{_datadir}/applications/*.desktop
 %{_mandir}/man1/gtk4-broadwayd.1*
 %endif
 
-%files devel -f gtk40-properties.lang
+%files devel
 %{_libdir}/libgtk-4.so
 %{_includedir}/*
 %{_libdir}/pkgconfig/*
@@ -190,17 +192,22 @@ desktop-file-validate %{buildroot}%{_datadir}/applications/*.desktop
 %{_bindir}/gtk4-demo
 %{_bindir}/gtk4-demo-application
 %{_bindir}/gtk4-icon-browser
+%{_bindir}/gtk4-node-editor
 %{_bindir}/gtk4-print-editor
+%{_bindir}/gtk4-rendernode-tool
 %{_bindir}/gtk4-widget-factory
+%{_datadir}/applications/org.gtk.gtk4.NodeEditor.desktop
 %{_datadir}/applications/org.gtk.Demo4.desktop
 %{_datadir}/applications/org.gtk.IconBrowser4.desktop
 %{_datadir}/applications/org.gtk.PrintEditor4.desktop
 %{_datadir}/applications/org.gtk.WidgetFactory4.desktop
+%{_datadir}/icons/hicolor/*/apps/org.gtk.gtk4.NodeEditor*.svg
 %{_datadir}/icons/hicolor/*/apps/org.gtk.Demo4*.svg
 %{_datadir}/icons/hicolor/*/apps/org.gtk.IconBrowser4*.svg
 %{_datadir}/icons/hicolor/*/apps/org.gtk.PrintEditor4*.svg
 %{_datadir}/icons/hicolor/*/apps/org.gtk.WidgetFactory4*.svg
 %{_datadir}/glib-2.0/schemas/org.gtk.Demo4.gschema.xml
+%{_datadir}/metainfo/org.gtk.gtk4.NodeEditor.appdata.xml
 %{_datadir}/metainfo/org.gtk.Demo4.appdata.xml
 %{_datadir}/metainfo/org.gtk.IconBrowser4.appdata.xml
 %{_datadir}/metainfo/org.gtk.PrintEditor4.appdata.xml
@@ -208,9 +215,19 @@ desktop-file-validate %{buildroot}%{_datadir}/applications/*.desktop
 %{_mandir}/man1/gtk4-demo.1*
 %{_mandir}/man1/gtk4-demo-application.1*
 %{_mandir}/man1/gtk4-icon-browser.1*
+%{_mandir}/man1/gtk4-node-editor.1*
+%{_mandir}/man1/gtk4-rendernode-tool.1*
 %{_mandir}/man1/gtk4-widget-factory.1*
 
 %changelog
+* Thu Dec 07 2023 Carlos Garnacho <cgarnach@redhat.com> - 4.12.3-2
+- Do not try to implement color glyphs without Pango help
+  Resolves: RHEL-842
+
+* Thu Nov 30 2023 Carlos Garnacho <cgarnach@redhat.com> - 4.12.3-1
+- Update to 4.12.3
+  Resolves: RHEL-842
+
 * Wed Jul 13 2022 Carlos Garnacho <cgarnach@redhat.com> - 4.4.1-2
 - Ensure Wayland gets the Wayland IM context
   Resolves: #2087031
