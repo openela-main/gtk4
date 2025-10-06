@@ -1,0 +1,11 @@
+--- gtk-4.14.4/meson.build.no-objcopy	2024-06-06 10:17:08.764814627 -0400
++++ gtk-4.14.4/meson.build	2024-06-06 10:17:31.276931886 -0400
+@@ -777,6 +777,8 @@
+   can_use_objcopy_for_resources = false
+ endif
+ 
++can_use_objcopy_for_resources = false
++
+ project_build_root = meson.current_build_dir()
+ 
+ gen_visibility_macros = find_program('build-aux/meson/gen-visibility-macros.py')
