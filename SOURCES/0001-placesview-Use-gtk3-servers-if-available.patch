@@ -1,0 +1,62 @@
+From 4194bc26356bbab819ad25807cacd92e18821a10 Mon Sep 17 00:00:00 2001
+From: Matthias Clasen <mclasen@redhat.com>
+Date: Tue, 18 Mar 2025 22:03:05 -0400
+Subject: [PATCH] placesview: Use gtk3 servers if available
+
+If .config/gtk-4.0/servers does not exist, but
+.config/gtk-3.0/servers does, copy it over and use it.
+---
+ gtk/gtkplacesview.c | 31 +++++++++++++++++++++++++------
+ 1 file changed, 25 insertions(+), 6 deletions(-)
+
+diff --git a/gtk/gtkplacesview.c b/gtk/gtkplacesview.c
+index 1a477999e7..c8a1ea60aa 100644
+--- a/gtk/gtkplacesview.c
++++ b/gtk/gtkplacesview.c
+@@ -207,18 +207,37 @@ server_list_load (GtkPlacesView *view)
+   g_mkdir_with_parents (datadir, 0700);
+   g_bookmark_file_load_from_file (bookmarks, filename, &error);
+ 
+-  if (error)
++  if (g_error_matches (error, G_FILE_ERROR, G_FILE_ERROR_NOENT))
+     {
+-      if (!g_error_matches (error, G_FILE_ERROR, G_FILE_ERROR_NOENT))
++      char *old_datadir;
++      char *old_filename;
++      char *contents = NULL;
++      gsize length;
++
++      old_datadir = g_build_filename (g_get_user_config_dir (), "gtk-3.0", NULL);
++      old_filename = g_build_filename (datadir, "servers", NULL);
++      if (g_file_get_contents (old_filename, &contents, &length, NULL) &&
++          g_file_set_contents (filename, contents, length, NULL))
+         {
+-          /* only warn if the file exists */
+-          g_warning ("Unable to open server bookmarks: %s", error->message);
+-          g_clear_pointer (&bookmarks, g_bookmark_file_free);
++          g_clear_error (&error);
++          g_bookmark_file_load_from_file (bookmarks, filename, &error);
+         }
+ 
+-      g_clear_error (&error);
++      g_free (contents);
++      g_free (old_filename);
++      g_free (old_datadir);
+     }
+ 
++  if (error &&
++      !g_error_matches (error, G_FILE_ERROR, G_FILE_ERROR_NOENT))
++    {
++      /* only warn if the file exists */
++      g_warning ("Unable to open server bookmarks: %s", error->message);
++      g_clear_pointer (&bookmarks, g_bookmark_file_free);
++    }
++
++  g_clear_error (&error);
++
+   /* Monitor the file in case it's modified outside this code */
+   if (!view->server_list_monitor)
+     {
+-- 
+2.49.0
+

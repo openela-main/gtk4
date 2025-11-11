@@ -1,0 +1,24 @@
+diff -up gtk-4.16.7/gtk/gtktext.c.no-emoji-context-menu gtk-4.16.7/gtk/gtktext.c
+--- gtk-4.16.7/gtk/gtktext.c.no-emoji-context-menu	2025-03-10 14:20:33.230216455 -0400
++++ gtk-4.16.7/gtk/gtktext.c	2025-03-10 14:20:46.104333590 -0400
+@@ -6304,7 +6304,7 @@ gtk_text_update_emoji_action (GtkText *s
+ 
+   gtk_widget_action_set_enabled (GTK_WIDGET (self), "misc.insert-emoji",
+                                  priv->editable &&
+-                                 (gtk_text_get_input_hints (self) & GTK_INPUT_HINT_NO_EMOJI) == 0);
++                                 (gtk_text_get_input_hints (self) & GTK_INPUT_HINT_EMOJI) != 0);
+ }
+ 
+ static GMenuModel *
+diff -up gtk-4.16.7/gtk/gtktextview.c.no-emoji-context-menu gtk-4.16.7/gtk/gtktextview.c
+--- gtk-4.16.7/gtk/gtktextview.c.no-emoji-context-menu	2025-03-10 14:19:58.237898072 -0400
++++ gtk-4.16.7/gtk/gtktextview.c	2025-03-10 14:20:19.298344903 -0400
+@@ -9205,7 +9205,7 @@ static void
+ gtk_text_view_update_emoji_action (GtkTextView *text_view)
+ {
+   gtk_widget_action_set_enabled (GTK_WIDGET (text_view), "misc.insert-emoji",
+-                                 (gtk_text_view_get_input_hints (text_view) & GTK_INPUT_HINT_NO_EMOJI) == 0 &&
++                                 (gtk_text_view_get_input_hints (text_view) & GTK_INPUT_HINT_EMOJI) != 0 &&
+                                  text_view->priv->editable);
+ }
+ 
