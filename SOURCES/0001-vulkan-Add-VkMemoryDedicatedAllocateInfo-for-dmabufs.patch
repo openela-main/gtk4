@@ -1,0 +1,35 @@
+From 975ad0c8c2539fe16a75dd60e75c8b24480ab5e3 Mon Sep 17 00:00:00 2001
+From: Benjamin Otte <otte@redhat.com>
+Date: Thu, 12 Feb 2026 03:10:56 +0100
+Subject: [PATCH] vulkan: Add VkMemoryDedicatedAllocateInfo for dmabufs
+
+This is required, but Mesa drivers are nice enough to not crash and burn
+if we forget.
+
+Thanks validation layers for the tip.
+
+Part-of: <https://gitlab.gnome.org/GNOME/gtk/-/merge_requests/9454>
+---
+ gsk/gpu/gskvulkanimage.c | 6 +++++-
+ 1 file changed, 5 insertions(+), 1 deletion(-)
+
+diff --git a/gsk/gpu/gskvulkanimage.c b/gsk/gpu/gskvulkanimage.c
+index 723791d9f2..f8dc5306c6 100644
+--- a/gsk/gpu/gskvulkanimage.c
++++ b/gsk/gpu/gskvulkanimage.c
+@@ -1043,7 +1043,11 @@ gsk_vulkan_image_new_dmabuf (GskVulkanDevice *device,
+                                       .pNext = &(VkExportMemoryAllocateInfo) {
+                                           .sType = VK_STRUCTURE_TYPE_EXPORT_MEMORY_ALLOCATE_INFO,
+                                           .handleTypes = VK_EXTERNAL_MEMORY_HANDLE_TYPE_DMA_BUF_BIT_EXT,
+-                                      }
++                                          .pNext = &(VkMemoryDedicatedAllocateInfo) {
++                                              .sType = VK_STRUCTURE_TYPE_MEMORY_DEDICATED_ALLOCATE_INFO,
++                                              .image = self->vk_image,
++                                          },
++                                      },
+                                   },
+                                   NULL,
+                                   &self->allocation.vk_memory);
+-- 
+2.55.0
+
