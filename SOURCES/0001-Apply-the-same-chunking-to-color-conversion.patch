@@ -1,0 +1,156 @@
+From c9d73c1c193acc5ca882b36a07f747ad5ebd4a9c Mon Sep 17 00:00:00 2001
+From: Matthias Clasen <mclasen@redhat.com>
+Date: Sun, 24 Nov 2024 17:48:43 -0500
+Subject: [PATCH] Apply the same chunking to color conversion
+
+When parallelizing color conversion, apply the same chunking that
+we do for memory format conversion, to avoid overhead for small
+sizes.
+---
+ gdk/gdkmemoryformat.c | 69 ++++++++++++++++++++++++-------------------
+ 1 file changed, 39 insertions(+), 30 deletions(-)
+
+diff --git a/gdk/gdkmemoryformat.c b/gdk/gdkmemoryformat.c
+index 7e45659445..c17be80b46 100644
+--- a/gdk/gdkmemoryformat.c
++++ b/gdk/gdkmemoryformat.c
+@@ -2279,6 +2279,7 @@
+   GdkColorState *dest_cs;
+   gsize width;
+   gsize height;
++  gsize chunk_size;
+ 
+   /* atomic */ int rows_done;
+ };
+@@ -2390,15 +2391,16 @@
+ gdk_memory_convert_color_state_srgb_to_srgb_linear (gpointer data)
+ {
+   MemoryConvertColorState *mc = data;
+-  int y;
++  int y0, y;
+   guint64 before = GDK_PROFILER_CURRENT_TIME;
+   gsize rows;
+ 
+-  for (y = g_atomic_int_add (&mc->rows_done, 1), rows = 0;
+-       y < mc->height;
+-       y = g_atomic_int_add (&mc->rows_done, 1), rows++)
++  for (y0 = g_atomic_int_add (&mc->rows_done, mc->chunk_size), rows = 0;
++       y0 < mc->height;
++       y0 = g_atomic_int_add (&mc->rows_done, mc->chunk_size))
+     {
+-      convert_srgb_to_srgb_linear (mc->data + y * mc->stride, mc->width);
++      for (y = y0; y < MIN (y0 + mc->chunk_size, mc->height); y++, rows++)
++        convert_srgb_to_srgb_linear (mc->data + y * mc->stride, mc->width);
+     }
+ 
+   ADD_MARK (before,
+@@ -2410,15 +2412,16 @@
+ gdk_memory_convert_color_state_srgb_linear_to_srgb (gpointer data)
+ {
+   MemoryConvertColorState *mc = data;
+-  int y;
++  int y0, y;
+   guint64 before = GDK_PROFILER_CURRENT_TIME;
+   gsize rows;
+ 
+-  for (y = g_atomic_int_add (&mc->rows_done, 1), rows = 0;
+-       y < mc->height;
+-       y = g_atomic_int_add (&mc->rows_done, 1), rows++)
++  for (y0 = g_atomic_int_add (&mc->rows_done, mc->chunk_size), rows = 0;
++       y0 < mc->height;
++       y0 = g_atomic_int_add (&mc->rows_done, mc->chunk_size))
+     {
+-      convert_srgb_linear_to_srgb (mc->data + y * mc->stride, mc->width);
++      for (y = y0; y < MIN (y0 + mc->chunk_size, mc->height); y++, rows++)
++        convert_srgb_linear_to_srgb (mc->data + y * mc->stride, mc->width);
+     }
+ 
+   ADD_MARK (before,
+@@ -2434,7 +2437,7 @@
+   GdkFloatColorConvert convert_func = NULL;
+   GdkFloatColorConvert convert_func2 = NULL;
+   float (*tmp)[4];
+-  int y;
++  int y0, y;
+   guint64 before = GDK_PROFILER_CURRENT_TIME;
+   gsize rows;
+ 
+@@ -2454,27 +2457,30 @@
+ 
+   tmp = g_malloc (sizeof (*tmp) * mc->width);
+ 
+-  for (y = g_atomic_int_add (&mc->rows_done, 1), rows = 0;
+-       y < mc->height;
+-       y = g_atomic_int_add (&mc->rows_done, 1), rows++)
++  for (y0 = g_atomic_int_add (&mc->rows_done, mc->chunk_size), rows = 0;
++       y0 < mc->height;
++       y0 = g_atomic_int_add (&mc->rows_done, mc->chunk_size))
+     {
+-      guchar *data = mc->data + y * mc->stride;
++      for (y = y0; y < MIN (y0 + mc->chunk_size, mc->height); y++, rows++)
++        {
++          guchar *data = mc->data + y * mc->stride;
+ 
+-      desc->to_float (tmp, data, mc->width);
++          desc->to_float (tmp, data, mc->width);
+ 
+-      if (desc->alpha == GDK_MEMORY_ALPHA_PREMULTIPLIED)
+-        unpremultiply (tmp, mc->width);
++          if (desc->alpha == GDK_MEMORY_ALPHA_PREMULTIPLIED)
++            unpremultiply (tmp, mc->width);
+ 
+-      if (convert_func)
+-        convert_func (mc->src_cs, tmp, mc->width);
++          if (convert_func)
++            convert_func (mc->src_cs, tmp, mc->width);
+ 
+-      if (convert_func2)
+-        convert_func2 (mc->dest_cs, tmp, mc->width);
++          if (convert_func2)
++            convert_func2 (mc->dest_cs, tmp, mc->width);
+ 
+-      if (desc->alpha == GDK_MEMORY_ALPHA_PREMULTIPLIED)
+-        premultiply (tmp, mc->width);
++          if (desc->alpha == GDK_MEMORY_ALPHA_PREMULTIPLIED)
++            premultiply (tmp, mc->width);
+ 
+-      desc->from_float (data, tmp, mc->width);
++          desc->from_float (data, tmp, mc->width);
++        }
+     }
+ 
+   g_free (tmp);
+@@ -2501,26 +2507,30 @@
+     .dest_cs = dest_cs,
+     .width = width,
+     .height = height,
++    .chunk_size = MAX (1, 512 / width),
+   };
++  guint n_tasks;
+ 
+   if (gdk_color_state_equal (src_cs, dest_cs))
+     return;
+ 
++  n_tasks = (mc.height + mc.chunk_size - 1) / mc.chunk_size;
++
+   if (format == GDK_MEMORY_B8G8R8A8_PREMULTIPLIED &&
+       src_cs == GDK_COLOR_STATE_SRGB &&
+       dest_cs == GDK_COLOR_STATE_SRGB_LINEAR)
+     {
+-      gdk_parallel_task_run (gdk_memory_convert_color_state_srgb_to_srgb_linear, &mc, G_MAXUINT);
++      gdk_parallel_task_run (gdk_memory_convert_color_state_srgb_to_srgb_linear, &mc, n_tasks);
+     }
+   else if (format == GDK_MEMORY_B8G8R8A8_PREMULTIPLIED &&
+            src_cs == GDK_COLOR_STATE_SRGB_LINEAR &&
+            dest_cs == GDK_COLOR_STATE_SRGB)
+     {
+-      gdk_parallel_task_run (gdk_memory_convert_color_state_srgb_linear_to_srgb, &mc, G_MAXUINT);
++      gdk_parallel_task_run (gdk_memory_convert_color_state_srgb_linear_to_srgb, &mc, n_tasks);
+     }
+   else
+     {
+-      gdk_parallel_task_run (gdk_memory_convert_color_state_generic, &mc, G_MAXUINT);
++      gdk_parallel_task_run (gdk_memory_convert_color_state_generic, &mc, n_tasks);
+     }
+ }
+ 

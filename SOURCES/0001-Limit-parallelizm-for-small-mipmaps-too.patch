@@ -1,0 +1,46 @@
+From dc3ad33a43c92243dc757316b7ec4e874dcd2532 Mon Sep 17 00:00:00 2001
+From: Matthias Clasen <mclasen@redhat.com>
+Date: Sun, 24 Nov 2024 18:54:34 -0500
+Subject: [PATCH] Limit parallelizm for small mipmaps too
+
+Apply the same ideas that we use for memory format and color
+conversions, to avoid overhead for small sizes.
+---
+ gdk/gdkmemoryformat.c | 11 ++++++++---
+ 1 file changed, 8 insertions(+), 3 deletions(-)
+
+diff --git a/gdk/gdkmemoryformat.c b/gdk/gdkmemoryformat.c
+index c17be80b46..3f91bbac6d 100644
+--- a/gdk/gdkmemoryformat.c
++++ b/gdk/gdkmemoryformat.c
+@@ -2690,19 +2690,24 @@ gdk_memory_mipmap (guchar          *dest,
+     .linear = linear,
+     .rows_done = 0,
+   };
++  gsize chunk_size;
++  guint n_tasks;
+ 
+   g_assert (lod_level > 0);
+ 
++  chunk_size = MAX (1, 512 / src_width),
++  n_tasks = (src_height + chunk_size - 1) / chunk_size;
++
+   if (dest_format == src_format)
+     {
+       if (linear)
+-        gdk_parallel_task_run (gdk_memory_mipmap_same_format_linear, &mipmap, G_MAXUINT);
++        gdk_parallel_task_run (gdk_memory_mipmap_same_format_linear, &mipmap, n_tasks);
+       else
+-        gdk_parallel_task_run (gdk_memory_mipmap_same_format_nearest, &mipmap, G_MAXUINT);
++        gdk_parallel_task_run (gdk_memory_mipmap_same_format_nearest, &mipmap, n_tasks);
+     }
+   else
+     {
+-      gdk_parallel_task_run (gdk_memory_mipmap_generic, &mipmap, G_MAXUINT);
++      gdk_parallel_task_run (gdk_memory_mipmap_generic, &mipmap, n_tasks);
+     }
+ }
+ 
+-- 
+2.53.0
+

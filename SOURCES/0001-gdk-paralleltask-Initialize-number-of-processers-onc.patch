@@ -1,0 +1,44 @@
+From 5362aa2e796204762abb7a764273ac7fbec19a3d Mon Sep 17 00:00:00 2001
+From: Khalid Abu Shawarib <kas@gnome.org>
+Date: Thu, 6 Mar 2025 05:58:24 +0300
+Subject: [PATCH] gdk/paralleltask: Initialize number of processers once
+
+Reading for every call seems to be non-trivial due to required syscalls.
+---
+ gdk/gdkparalleltask.c | 6 ++++--
+ 1 file changed, 4 insertions(+), 2 deletions(-)
+
+diff --git a/gdk/gdkparalleltask.c b/gdk/gdkparalleltask.c
+index 683df5b927..3da799d104 100644
+--- a/gdk/gdkparalleltask.c
++++ b/gdk/gdkparalleltask.c
+@@ -57,6 +57,7 @@ gdk_parallel_task_run (GdkTaskFunc task_func,
+                        guint       max_tasks)
+ {
+   static GThreadPool *pool;
++  static guint nproc;
+   TaskData task = {
+     .task_func = task_func,
+     .task_data = task_data,
+@@ -71,7 +72,8 @@ gdk_parallel_task_run (GdkTaskFunc task_func,
+ 
+   if (g_once_init_enter (&pool))
+     {
+-      guint num_threads = CLAMP (2, g_get_num_processors () - 1, 32);
++      nproc = g_get_num_processors ();
++      guint num_threads = CLAMP (2, nproc - 1, 32);
+       GThreadPool *the_pool = g_thread_pool_new (gdk_parallel_task_thread_func,
+                                                  NULL,
+                                                  num_threads,
+@@ -81,7 +83,7 @@ gdk_parallel_task_run (GdkTaskFunc task_func,
+       g_once_init_leave (&pool, the_pool);
+     }
+ 
+-  n_tasks = MIN (max_tasks, g_get_num_processors ());
++  n_tasks = MIN (max_tasks, nproc);
+   task.n_running_tasks = n_tasks;
+   /* Start with 1 because we run 1 task ourselves */
+   for (i = 1; i < n_tasks; i++)
+-- 
+2.53.0
+

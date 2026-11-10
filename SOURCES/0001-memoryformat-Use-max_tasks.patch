@@ -1,0 +1,137 @@
+From 33c5f7456c2c5d1d26f748ad1df92223c8f630e9 Mon Sep 17 00:00:00 2001
+From: Matthias Clasen <mclasen@redhat.com>
+Date: Sun, 24 Nov 2024 10:33:45 -0500
+Subject: [PATCH] memoryformat: Use max_tasks
+
+We now grab rows in chunks, and we can't make use of more threads
+than the total number of rows, divided by the chunk size. This
+helps reduce the threading overhead for small sizes, and makes the
+parallel run code competitive with the single-threaded code in those
+cases, until the size reacheds ~ 2000 pixels, when the threading
+starts to be faster.
+
+For data, see
+https://gitlab.gnome.org/GNOME/gtk/-/merge_requests/7965
+---
+ gdk/gdkmemoryformat.c | 25 ++++++++++++++-----------
+ 1 file changed, 14 insertions(+), 11 deletions(-)
+
+diff --git a/gdk/gdkmemoryformat.c b/gdk/gdkmemoryformat.c
+index 05821e31d8..7e45659445 100644
+--- a/gdk/gdkmemoryformat.c
++++ b/gdk/gdkmemoryformat.c
+@@ -2100,6 +2100,7 @@
+   GdkColorState       *src_cs;
+   gsize                width;
+   gsize                height;
++  gsize                chunk_size;
+ 
+   /* atomic */ int     rows_done;
+ };
+@@ -2114,7 +2115,7 @@
+   GdkFloatColorConvert convert_func = NULL;
+   GdkFloatColorConvert convert_func2 = NULL;
+   gboolean needs_premultiply, needs_unpremultiply;
+-  gsize y, n;
++  gsize y0, y;
+   gint64 before = GDK_PROFILER_CURRENT_TIME;
+   gsize rows;
+ 
+@@ -2126,16 +2127,17 @@
+ 
+       if (func != NULL)
+         {
+-          n = 1;
+-
+-          for (y = g_atomic_int_add (&mc->rows_done, n);
+-               y < mc->height;
+-               y = g_atomic_int_add (&mc->rows_done, n))
++          for (y0 = g_atomic_int_add (&mc->rows_done, mc->chunk_size), rows = 0;
++               y0 < mc->height;
++               y0 = g_atomic_int_add (&mc->rows_done, mc->chunk_size))
+             {
+-              const guchar *src_data = mc->src_data + y * mc->src_stride;
+-              guchar *dest_data = mc->dest_data + y * mc->dest_stride;
++              for (y = y0; y < MIN (y0 + mc->chunk_size, mc->height); y++, rows++)
++                {
++                  const guchar *src_data = mc->src_data + y * mc->src_stride;
++                  guchar *dest_data = mc->dest_data + y * mc->dest_stride;
+ 
+-              func (dest_data, src_data, mc->width);
++                  func (dest_data, src_data, mc->width);
++                }
+             }
+           return;
+         }
+@@ -2167,30 +2169,32 @@
+     }
+ 
+   tmp = g_malloc (sizeof (*tmp) * mc->width);
+-  n = 1;
+ 
+-  for (y = g_atomic_int_add (&mc->rows_done, n), rows = 0;
+-       y < mc->height;
+-       y = g_atomic_int_add (&mc->rows_done, n), rows++)
++  for (y0 = g_atomic_int_add (&mc->rows_done, mc->chunk_size), rows = 0;
++       y0 < mc->height;
++       y0 = g_atomic_int_add (&mc->rows_done, mc->chunk_size), rows++)
+     {
+-      const guchar *src_data = mc->src_data + y * mc->src_stride;
+-      guchar *dest_data = mc->dest_data + y * mc->dest_stride;
++      for (y = y0; y < MIN (y0 + mc->chunk_size, mc->height); y++, rows++)
++        {
++          const guchar *src_data = mc->src_data + y * mc->src_stride;
++          guchar *dest_data = mc->dest_data + y * mc->dest_stride;
+ 
+-      src_desc->to_float (tmp, src_data, mc->width);
++          src_desc->to_float (tmp, src_data, mc->width);
+ 
+-      if (needs_unpremultiply)
+-        unpremultiply (tmp, mc->width);
++          if (needs_unpremultiply)
++            unpremultiply (tmp, mc->width);
+ 
+-      if (convert_func)
+-        convert_func (mc->src_cs, tmp, mc->width);
++          if (convert_func)
++            convert_func (mc->src_cs, tmp, mc->width);
+ 
+-      if (convert_func2)
+-        convert_func2 (mc->dest_cs, tmp, mc->width);
++          if (convert_func2)
++            convert_func2 (mc->dest_cs, tmp, mc->width);
+ 
+-      if (needs_premultiply)
+-        premultiply (tmp, mc->width);
++          if (needs_premultiply)
++            premultiply (tmp, mc->width);
+ 
+-      dest_desc->from_float (dest_data, tmp, mc->width);
++          dest_desc->from_float (dest_data, tmp, mc->width);
++        }
+     }
+ 
+   g_free (tmp);
+@@ -2223,8 +2227,11 @@
+     .src_cs = src_cs,
+     .width = width,
+     .height = height,
++    .chunk_size = MAX (1, 512 / width),
+   };
+ 
++  guint n_tasks;
++
+   g_assert (dest_format < GDK_MEMORY_N_FORMATS);
+   g_assert (src_format < GDK_MEMORY_N_FORMATS);
+   /* We don't allow overlap here. If you want to do in-place color state conversions,
+@@ -2256,7 +2263,9 @@
+       return;
+     }
+ 
+-  gdk_parallel_task_run (gdk_memory_convert_generic, &mc, G_MAXUINT);
++  n_tasks = (mc.height + mc.chunk_size - 1) / mc.chunk_size;
++
++  gdk_parallel_task_run (gdk_memory_convert_generic, &mc, n_tasks);
+ }
+ 
+ typedef struct _MemoryConvertColorState MemoryConvertColorState;
