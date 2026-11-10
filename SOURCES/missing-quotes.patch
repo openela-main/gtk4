@@ -1,0 +1,12 @@
+diff -up gtk-4.12.3/demos/gtk-demo/application.c.missing-quotes gtk-4.12.3/demos/gtk-demo/application.c
+--- gtk-4.12.3/demos/gtk-demo/application.c.missing-quotes	2026-07-06 15:35:12.115674096 -0400
++++ gtk-4.12.3/demos/gtk-demo/application.c	2026-07-06 15:35:26.094008368 -0400
+@@ -35,7 +35,7 @@ show_action_dialog (GSimpleAction *actio
+ {
+   GtkAlertDialog *dialog;
+ 
+-  dialog = gtk_alert_dialog_new ("You activated action: \"%s\n",
++  dialog = gtk_alert_dialog_new ("You activated action: \"%s\"\n",
+                                  g_action_get_name (G_ACTION (action)));
+   gtk_alert_dialog_show (dialog, NULL);
+   g_object_unref (dialog);

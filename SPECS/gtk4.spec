@@ -17,7 +17,7 @@
 
 Name:           gtk4
 Version:        4.12.3
-Release:        2%{?dist}
+Release:        3%{?dist}
 Summary:        GTK graphical user interface library
 
 License:        LGPL-2.0-or-later
@@ -91,6 +91,8 @@ Recommends: dconf%{?_isa}
 Obsoletes: gtk4-devel-docs < 4.1.2
 
 Patch00001: preserve-old-glib-pango.diff
+Patch00002: drop-objcopy-use.patch
+Patch00003: missing-quotes.patch
 
 %description
 GTK is a multi-platform toolkit for creating graphical user
@@ -220,6 +222,12 @@ desktop-file-validate %{buildroot}%{_datadir}/applications/*.desktop
 %{_mandir}/man1/gtk4-widget-factory.1*
 
 %changelog
+* Mon Jul 06 2026 Matthias Clasen <mclasen@redhat.com> - 4.12.3-3
+- Stop using objcopy for resources
+  Resolves: RHEL-186555
+- Add missing quotes
+  Resolves: RHEL-178315
+
 * Thu Dec 07 2023 Carlos Garnacho <cgarnach@redhat.com> - 4.12.3-2
 - Do not try to implement color glyphs without Pango help
   Resolves: RHEL-842
